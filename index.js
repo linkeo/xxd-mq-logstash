@@ -11,7 +11,7 @@ module.exports = class LogstashMQ {
    * @param {object} options 
    * @param {string} options.server Server Url
    * @param {string} options.queue
-   * @param {string} [options.evictTimeout=5000] Timeout that will auto close connection in idle state.
+   * @param {number} [options.evictTimeout=5000] Timeout that will auto close connection in idle state.
    * @param {object} options.payload
    */
   constructor(options) {

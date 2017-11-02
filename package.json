@@ -1,12 +1,13 @@
 {
   "name": "xxd-mq-logstash",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "description": "Push logs to logstash via rabbitmq.",
   "main": "index.js",
   "scripts": {
     "test": "echo \"Error: no test specified\" && exit 1"
   },
-  "author": "linkang <linkang@innobuddy.com>",
+  "author": "linkeo <linkeo@qq.com>",
+  "repository": "linkeo/xxd-mq-logstash",
   "license": "ISC",
   "dependencies": {
     "amqplib": "^0.5.1",
