@@ -1,0 +1,18 @@
+{
+  "name": "xxd-mq-logstash",
+  "version": "1.0.0",
+  "description": "Push logs to logstash via rabbitmq.",
+  "main": "index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "author": "linkang <linkang@innobuddy.com>",
+  "license": "ISC",
+  "dependencies": {
+    "amqplib": "^0.5.1",
+    "co": "^4.6.0",
+    "debug": "^3.1.0",
+    "lodash": "^4.17.4",
+    "xxd-log": "^1.0.2"
+  }
+}
