@@ -1,6 +1,6 @@
 {
   "name": "xxd-mq-logstash",
-  "version": "1.0.1",
+  "version": "1.0.2",
   "description": "Push logs to logstash via rabbitmq.",
   "main": "index.js",
   "scripts": {

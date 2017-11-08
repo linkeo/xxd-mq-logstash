@@ -61,8 +61,13 @@ module.exports = class LogstashMQ {
           if (!_up) {
             _up = co(up());
           }
-          yield _up;
-          _up = undefined;
+          try {
+            yield _up;
+          } catch (err) {
+            throw err;
+          } finally {
+            _up = undefined;
+          }
         }
         yield send();
         lastAccess = Date.now();
