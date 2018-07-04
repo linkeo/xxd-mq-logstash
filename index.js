@@ -35,8 +35,8 @@ module.exports = class LogstashMQ {
      * @param {object} payload
      */
     this.push = (payload) => {
-      const _payload = JSON.stringify(Object.assign({}, basePayload, payload));
-      function *send() {
+      const _payload = JSON.stringify(Object.assign({}, basePayload, { '@timestamp': new Date() }, payload));
+      function* send() {
         let error;
         if (!qassert) {
           try {
@@ -54,7 +54,7 @@ module.exports = class LogstashMQ {
           throw new Error(`Assert queue "${queue}" failed. Cannot send payload "${_payload}": ${error && error.message}`);
         }
       }
-      co(function *() {
+      co(function* () {
         lastAccess = Date.now();
         debug(`[${server}] check ready: ${ready}`);
         if (!ready) {
@@ -76,7 +76,7 @@ module.exports = class LogstashMQ {
       });
     };
 
-    function *up() {
+    function* up() {
       debug(`[${server}] up...`);
       conn = yield mq.connect(server, { heartbeat: 1 });
       channel = yield conn.createChannel();
@@ -91,7 +91,7 @@ module.exports = class LogstashMQ {
       debug(`[${server}] up...done`);
     }
 
-    function *down() {
+    function* down() {
       debug(`[${server}] down...`);
       ready = false;
       qassert = {};
