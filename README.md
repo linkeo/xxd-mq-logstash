@@ -108,3 +108,9 @@ logstash.errorLog(err, {
   }
 });
 ```
+
+## 更新日志
+
+### 1.1.0
+
+- 自动添加`@timestamp`字段，可被`push`时的`payload`覆盖
