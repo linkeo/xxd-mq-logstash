@@ -82,10 +82,12 @@ module.exports = class LogstashMQ {
       channel = yield conn.createChannel();
       channel.on('error', (err)=>{
         ready = false;
+        qassert = false;
         log.error(`Error threw by channel of queue "${queue}": ${err.stack}`);
       });
       channel.on('close', (err)=>{
         ready = false;
+        qassert = false;
         debug(`[${server}] Channel of queue "${queue}" is closed.`);
       });
       lastAccess = Date.now();
