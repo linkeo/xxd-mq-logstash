@@ -86,7 +86,7 @@ module.exports = class LogstashMQ {
       });
       channel.on('close', (err)=>{
         ready = false;
-        log.error(`Channel of queue "${queue}" is closed.`);
+        debug(`[${server}] Channel of queue "${queue}" is closed.`);
       });
       lastAccess = Date.now();
       ready = true;
@@ -100,6 +100,7 @@ module.exports = class LogstashMQ {
     }
 
     function* down() {
+      if (!ready) { return; }
       debug(`[${server}] down...`);
       ready = false;
       qassert = false;
