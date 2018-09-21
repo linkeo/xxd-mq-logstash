@@ -1,14 +1,11 @@
-'use strict';
-
 const mq = require('amqplib');
 const log = require('xxd-log');
 const debug = require('debug')('xxd:logstash');
 const _ = require('lodash');
-const co = require('co');
 
 module.exports = class LogstashMQ {
   /**
-   * @param {object} options 
+   * @param {object} options
    * @param {string} options.server Server Url
    * @param {string} options.queue
    * @param {number} [options.evictTimeout=5000] Timeout that will auto close connection in idle state.
@@ -20,99 +17,157 @@ module.exports = class LogstashMQ {
     const basePayload = _.get(options, 'payload');
     const evictTimeout = Number(_.get(options, 'evictTimeout')) || 5000;
 
-    if (!server) { throw new Error('[xxd-logstash] RabbitMQ Service is not provided.'); }
-    if (!queue) { throw new Error('[xxd-logstash] RabbitMQ Queue is not provided.'); }
+    if (!server) {
+      throw new Error('[xxd-logstash] RabbitMQ Service is not provided.');
+    }
+    if (!queue) {
+      throw new Error('[xxd-logstash] RabbitMQ Queue is not provided.');
+    }
 
-    let conn;
-    let channel;
-    let ready = false;
-    let qassert = false;
+    /** @type {mq.Connection} */ let connection;
+    /** @type {mq.Channel} */ let channel;
+    /** @type {Promise|void} */ let connectPromise; // up promise
+    /** @type {Promise|void} */ let assertPromise; // _assert promise
+    let connected = false;
+    let asserted = false;
     let lastAccess = Date.now();
     let evictTimer;
-    let _up;
+    let lastErrorTime = 0;
 
     /**
      * @param {object} payload
      */
-    this.push = (payload) => {
-      const _payload = JSON.stringify(Object.assign({}, basePayload, { '@timestamp': new Date() }, payload));
-      function* send() {
-        let error;
-        if (!qassert) {
-          try {
-            yield channel.assertQueue(queue);
-            qassert = true;
-          } catch (err) {
-            error = err;
-            qassert = false;
-          }
+    this.push = payload => {
+      const fullPayload = JSON.stringify(
+        Object.assign({}, basePayload, { '@timestamp': new Date() }, payload)
+      );
+
+      push(fullPayload).catch(err => {
+        const now = Date.now();
+        if (now - lastErrorTime > 1000) {
+          log.error(`Error sending payload to queue "${queue}": ${err.stack}`);
         }
-        if (qassert) {
-          channel.sendToQueue(queue, Buffer.from(_payload));
-          debug(`[${server}] Send payload to queue "${queue}": ${_payload}`);
-        } else {
-          throw new Error(`Assert queue "${queue}" failed. Cannot send payload "${_payload}": ${error && error.message}`);
-        }
-      }
-      co(function* () {
-        lastAccess = Date.now();
-        debug(`[${server}] check ready: ${ready}`);
-        if (!ready) {
-          if (!_up) {
-            _up = co(up());
-          }
-          try {
-            yield _up;
-          } catch (err) {
-            throw err;
-          } finally {
-            _up = undefined;
-          }
-        }
-        yield send();
-        lastAccess = Date.now();
-      }).catch(err => {
-        log.error(`Error sending payload to queue "${queue}": ${err.stack}`);
+        lastErrorTime = now;
       });
     };
 
-    function* up() {
-      debug(`[${server}] up...`);
-      conn = yield mq.connect(server, { heartbeat: 1 });
-      channel = yield conn.createChannel();
-      channel.on('error', (err)=>{
-        ready = false;
-        qassert = false;
+    async function push(payload) {
+      if (!connected) {
+        if (!connectPromise) {
+          connectPromise = connect();
+        }
+        try {
+          await connectPromise;
+        } catch (err) {
+          throw err;
+        } finally {
+          connectPromise = undefined;
+        }
+      }
+      if (!asserted) {
+        if (!assertPromise) {
+          assertPromise = assert();
+        }
+        try {
+          await assertPromise;
+        } catch (err) {
+          throw err;
+        } finally {
+          assertPromise = undefined;
+        }
+      }
+      return send(payload);
+    }
+
+    async function send(payload) {
+      if (!asserted) {
+        throw new Error(
+          `Cannot send payload to queue "${queue}", because queue is not asserted.`
+        );
+      }
+      const result = channel.sendToQueue(queue, Buffer.from(payload));
+      debug(`[${server}] Send payload to queue "${queue}": ${payload}`);
+      return result;
+    }
+
+    async function assert() {
+      if (!connected) {
+        asserted = false;
+        throw new Error('Cannot assert queue, because connection is closed.');
+      }
+      try {
+        await channel.assertQueue(queue);
+        asserted = true;
+      } catch (err) {
+        asserted = false;
+        throw err;
+      }
+    }
+
+    async function connect() {
+      debug(`[${server}] connecting...`);
+
+      // Create new connection
+      connection = await mq.connect(
+        server,
+        { heartbeat: 1 }
+      );
+      connection.on('error', err => {
+        connected = false;
+        asserted = false;
+        log.error(
+          `Error threw by connection of queue "${queue}": ${err.stack}`
+        );
+      });
+      connection.on('close', err => {
+        connected = false;
+        asserted = false;
+        debug(`[${server}] Connection of queue "${queue}" is closed.`);
+      });
+
+      // Create new channel
+      channel = await connection.createChannel();
+      channel.on('error', err => {
+        connected = false;
+        asserted = false;
         log.error(`Error threw by channel of queue "${queue}": ${err.stack}`);
       });
-      channel.on('close', (err)=>{
-        ready = false;
-        qassert = false;
+      channel.on('close', err => {
+        connected = false;
+        asserted = false;
         debug(`[${server}] Channel of queue "${queue}" is closed.`);
       });
       lastAccess = Date.now();
-      ready = true;
-      qassert = false;
+      connected = true;
+      asserted = false;
       evictTimer = setInterval(() => {
-        if (ready && (Date.now() - lastAccess > evictTimeout)) {
-          co(down).catch(err => log.error(`Error during down: ${err.stack}`));
+        if (connected && Date.now() - lastAccess > evictTimeout) {
+          disconnect().catch(err =>
+            log.error(`Error during disconnect: ${err.stack}`)
+          );
         }
       }, 500);
-      debug(`[${server}] up...done`);
+      debug(`[${server}] connecting...done`);
     }
 
-    function* down() {
-      if (!ready) { return; }
-      debug(`[${server}] down...`);
-      ready = false;
-      qassert = false;
-      const _channel = channel;
-      const _conn = conn;
+    async function disconnect() {
+      if (!connected) {
+        return;
+      }
+      debug(`[${server}] disconnecting...`);
+      connected = false;
+      asserted = false;
+      const channelToClose = channel;
+      const connectionToClose = connection;
       clearInterval(evictTimer);
       evictTimer = undefined;
-      _channel && (yield _channel.close());
-      _conn && (yield _conn.close());
-      debug(`[${server}] down...done`);
+      if (channelToClose) {
+        await channelToClose.close();
+      }
+      if (connectionToClose) {
+        await connectionToClose.close();
+      }
+      debug(`[${server}] disconnecting...done`);
     }
   }
 };
