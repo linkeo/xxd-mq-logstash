@@ -80,9 +80,17 @@ module.exports = class LogstashMQ {
       debug(`[${server}] up...`);
       conn = yield mq.connect(server, { heartbeat: 1 });
       channel = yield conn.createChannel();
+      channel.on('error', (err)=>{
+        ready = false;
+        log.error(`Error threw by channel of queue "${queue}": ${err.stack}`);
+      });
+      channel.on('close', (err)=>{
+        ready = false;
+        log.error(`Channel of queue "${queue}" is closed.`);
+      });
       lastAccess = Date.now();
       ready = true;
-      qassert = {};
+      qassert = false;
       evictTimer = setInterval(() => {
         if (ready && (Date.now() - lastAccess > evictTimeout)) {
           co(down).catch(err => log.error(`Error during down: ${err.stack}`));
@@ -94,7 +102,7 @@ module.exports = class LogstashMQ {
     function* down() {
       debug(`[${server}] down...`);
       ready = false;
-      qassert = {};
+      qassert = false;
       const _channel = channel;
       const _conn = conn;
       clearInterval(evictTimer);
