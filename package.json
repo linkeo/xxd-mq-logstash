@@ -1,6 +1,6 @@
 {
   "name": "xxd-mq-logstash",
-  "version": "1.1.4",
+  "version": "1.1.5",
   "description": "Push logs to logstash via rabbitmq.",
   "main": "index.js",
   "scripts": {
@@ -11,7 +11,6 @@
   "license": "ISC",
   "dependencies": {
     "amqplib": "^0.5.1",
-    "co": "^4.6.0",
     "debug": "^3.1.0",
     "lodash": "^4.17.4",
     "xxd-log": "^1.0.2"
